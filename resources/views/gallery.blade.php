@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VIP Gallery — EXE</title>
-    <link rel="icon" type="image/svg+xml" href="{{ asset('storage/photos/tornado-svgrepo-com.svg') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ asset('images/logo.svg') }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
@@ -197,7 +197,7 @@
     <!-- Top Bar -->
     <div class="top-bar">
         <div class="top-bar-left">
-            <img src="{{ asset('storage/photos/tornado-svgrepo-com.svg') }}" alt="" class="top-bar-logo">
+            <img src="{{ asset('images/logo.svg') }}" alt="" class="top-bar-logo">
             <span class="top-bar-title">Family VIP // EXE</span>
         </div>
         <div class="top-bar-right">
@@ -213,7 +213,7 @@
 
     @if($photos->isEmpty())
         <div class="empty-state">
-            <img src="{{ asset('storage/photos/tornado-svgrepo-com.svg') }}" alt="" class="empty-state-icon">
+            <img src="{{ asset('images/logo.svg') }}" alt="" class="empty-state-icon">
             <h2 x-text="t('noEntries')"></h2>
             <p x-text="t('uploadFirst')"></p>
         </div>
