@@ -132,7 +132,7 @@
 <body>
     <div class="splash-container">
         <div class="logo-wrapper">
-            <img src="{{ asset('storage/photos/tornado-svgrepo-com.svg') }}" alt="VIP Gallery">
+            <img src="{{ asset('images/logo.svg') }}" alt="VIP Gallery">
         </div>
         <div class="splash-text">
             <h1>Family VIP Gallery</h1>
