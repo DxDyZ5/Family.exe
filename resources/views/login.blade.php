@@ -152,7 +152,7 @@
     </div>
 
     <div class="auth-container">
-        <img src="{{ asset('storage/photos/tornado-svgrepo-com.svg') }}" alt="VIP" class="logo-mark">
+        <img src="{{ asset('images/logo.svg') }}" alt="VIP" class="logo-mark">
 
         <!-- STEP 1: Phone Input -->
         <div x-show="step === 'phone'" x-transition:enter="step-panel" x-transition:enter-start="fade-enter" x-transition:enter-end="" x-transition:leave="step-panel" x-transition:leave-start="" x-transition:leave-end="fade-leave">
