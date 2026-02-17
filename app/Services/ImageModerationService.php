@@ -25,18 +25,19 @@ class ImageModerationService
      */
     public function moderate(Photo $photo): bool
     {
-        
+        $disk = Storage::disk('public');
 
-    if (!Storage::disk('public')->exists($photo->file_path)) {
-        Log::error("ImageModeration: Laravel no ve el archivo en el disco public: {$photo->file_path}");
-        return true; // Fail-safe: si no lo vemos, no lo bloqueamos
-    }
-
-        $filePath = Storage::disk('public')->path($photo->file_path);
+        if (!$disk->exists($photo->file_path)) {
+            Log::error("ImageModeration: Laravel no ve el archivo en el disco public: {$photo->file_path}");
+            return true; 
+        }
 
         try {
+            
+            $fileContent = $disk->get($photo->file_path);
+
             $response = Http::timeout(15)
-                ->attach('media', file_get_contents($filePath), basename($filePath))
+                ->attach('media', $fileContent, basename($photo->file_path))
                 ->post('https://api.sightengine.com/1.0/check.json', [
                     'models' => 'nudity-2.1,offensive,gore',
                     'api_user' => $this->apiUser,
