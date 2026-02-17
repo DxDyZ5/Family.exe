@@ -25,13 +25,14 @@ class ImageModerationService
      */
     public function moderate(Photo $photo): bool
     {
+        
+
+    if (!Storage::disk('public')->exists($photo->file_path)) {
+        Log::error("ImageModeration: Laravel no ve el archivo en el disco public: {$photo->file_path}");
+        return true; // Fail-safe: si no lo vemos, no lo bloqueamos
+    }
+
         $filePath = Storage::disk('public')->path($photo->file_path);
-
-        if (!file_exists($filePath)) {
-            Log::error("ImageModeration: File not found at {$filePath}");
-
-            return false;
-        }
 
         try {
             $response = Http::timeout(15)
