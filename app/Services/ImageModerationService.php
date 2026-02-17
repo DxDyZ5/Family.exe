@@ -24,51 +24,60 @@ class ImageModerationService
      * Returns true if the image is safe, false if flagged or API fails.
      */
     public function moderate(Photo $photo): bool
-{
-    $disk = Storage::disk('public');
+    {
+        $filePath = Storage::disk('public')->path($photo->file_path);
 
-    // Si Laravel no ve el archivo, NO DEVUELVAS FALSE. 
-    // Devuelve true para que al menos la foto se vea y no se quede en blur eterno.
-    if (!$disk->exists($photo->file_path)) {
-        Log::error("RAILWAY ERROR: Archivo no encontrado en el volumen: {$photo->file_path}");
-        return true; // <--- CAMBIO CLAVE
+        if (!file_exists($filePath)) {
+            Log::error("ImageModeration: File not found at {$filePath}");
+
+            return false;
+        }
+
+        try {
+            Log::info('ImageModeration: Sending request to Sightengine', ['file' => $filePath]);
+
+            $response = Http::timeout(15)
+                ->attach('media', file_get_contents($filePath), basename($filePath))
+                ->post('https://api.sightengine.com/1.0/check.json', [
+                    'models' => 'nudity-2.1,offensive,gore',
+                    'api_user' => $this->apiUser,
+                    'api_secret' => $this->apiSecret,
+                ]);
+
+            if (!$response->successful()) {
+                Log::warning('ImageModeration: API returned HTTP ' . $response->status());
+
+                return false;
+            }
+
+            $data = $response->json();
+
+            if (($data['status'] ?? '') !== 'success') {
+                $errorCode = $data['error']['code'] ?? 'unknown';
+                Log::warning("ImageModeration: API error — {$errorCode}");
+
+                return false;
+            }
+
+            $nudity = $data['nudity'] ?? [];
+            $isNude = ($nudity['sexual_activity'] ?? 0) > 0.5
+                || ($nudity['sexual_display'] ?? 0) > 0.5
+                || ($nudity['erotica'] ?? 0) > 0.5;
+
+            $isOffensive = ($data['offensive']['prob'] ?? 0) > 0.7;
+            $isGore = ($data['gore']['prob'] ?? 0) > 0.5;
+
+            if ($isNude || $isOffensive || $isGore) {
+                Log::info("ImageModeration: Photo {$photo->id} flagged (nude={$isNude}, offensive={$isOffensive}, gore={$isGore})");
+
+                return false;
+            }
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error('ImageModeration: Exception — ' . $e->getMessage());
+
+            return false;
+        }
     }
-
-    try {
-        $fileContent = $disk->get($photo->file_path);
-
-        $response = Http::timeout(15)
-            ->attach('media', $fileContent, basename($photo->file_path))
-            ->post('https://api.sightengine.com/1.0/check.json', [
-                'models' => 'nudity-2.1,offensive,gore',
-                'api_user' => $this->apiUser,
-                'api_secret' => $this->apiSecret,
-            ]);
-
-        if (!$response->successful()) {
-            Log::warning('Sightengine Down: HTTP ' . $response->status());
-            return true; // Si la API falla, no bloquees al usuario
-        }
-
-        $data = $response->json();
-
-        if (($data['status'] ?? '') !== 'success') {
-            return true; // Si hay error de créditos o algo, permite la foto
-        }
-
-        // SOLO bloqueamos si la IA está segura
-        $nudity = $data['nudity'] ?? [];
-        $isNude = ($nudity['sexual_activity'] ?? 0) > 0.8 || ($nudity['erotica'] ?? 0) > 0.8;
-        $isOffensive = ($data['offensive']['prob'] ?? 0) > 0.9;
-
-        if ($isNude || $isOffensive) {
-            return false; // AQUÍ SÍ BLOQUEAMOS
-        }
-
-        return true;
-    } catch (\Exception $e) {
-        Log::error('Excepción en Moderación: ' . $e->getMessage());
-        return true; // Ante la duda, deja pasar la foto
-    }
-}
 }
