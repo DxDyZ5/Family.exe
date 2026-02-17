@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Storage;
 class ImageModerationService
 {
     protected string $apiUser;
+
     protected string $apiSecret;
 
     public function __construct()
@@ -20,75 +21,61 @@ class ImageModerationService
 
     /**
      * Moderate an uploaded photo via Sightengine.
-     * Returns true if the image is safe (or if a technical error occurs).
-     * Returns false ONLY if explicitly flagged by the AI.
+     * Returns true if the image is safe, false if flagged or API fails.
      */
     public function moderate(Photo $photo): bool
     {
-        $disk = Storage::disk('public');
+        $filePath = Storage::disk('public')->path($photo->file_path);
 
-     
-        if (!$disk->exists($photo->file_path)) {
-            Log::error("ImageModeration: Archivo no encontrado en disco: {$photo->file_path}");
-            
-            return true; 
+        if (!file_exists($filePath)) {
+            Log::error("ImageModeration: File not found at {$filePath}");
+
+            return false;
         }
 
         try {
-            $fileContent = $disk->get($photo->file_path);
-
-            $response = Http::timeout(20)
-                ->attach('media', $fileContent, basename($photo->file_path))
+            $response = Http::timeout(15)
+                ->attach('media', file_get_contents($filePath), basename($filePath))
                 ->post('https://api.sightengine.com/1.0/check.json', [
                     'models' => 'nudity-2.1,offensive,gore',
                     'api_user' => $this->apiUser,
                     'api_secret' => $this->apiSecret,
                 ]);
 
-       
             if (!$response->successful()) {
-                Log::warning('ImageModeration: Fallo de conexión API HTTP ' . $response->status());
-                return true; 
+                Log::warning('ImageModeration: API returned HTTP ' . $response->status());
+
+                return false;
             }
 
             $data = $response->json();
 
-        
             if (($data['status'] ?? '') !== 'success') {
                 $errorCode = $data['error']['code'] ?? 'unknown';
-                Log::warning("ImageModeration: Error de respuesta API — {$errorCode}");
-                return true; 
+                Log::warning("ImageModeration: API error — {$errorCode}");
+
+                return false;
             }
 
-          
             $nudity = $data['nudity'] ?? [];
-            
-        
-            $isNude = ($nudity['sexual_activity'] ?? 0) > 0.85
-                || ($nudity['sexual_display'] ?? 0) > 0.80
-                || ($nudity['erotica'] ?? 0) > 0.80;
+            $isNude = ($nudity['sexual_activity'] ?? 0) > 0.5
+                || ($nudity['sexual_display'] ?? 0) > 0.5
+                || ($nudity['erotica'] ?? 0) > 0.5;
 
-            // Offensive suele ser muy sensible, subimos a 0.9
-            $isOffensive = ($data['offensive']['prob'] ?? 0) > 0.90;
-            $isGore = ($data['gore']['prob'] ?? 0) > 0.75;
-
-
-            Log::info("ImageModeration: Scan Foto {$photo->id}", [
-                'scores' => $nudity,
-                'is_flagged' => ($isNude || $isOffensive || $isGore)
-            ]);
+            $isOffensive = ($data['offensive']['prob'] ?? 0) > 0.7;
+            $isGore = ($data['gore']['prob'] ?? 0) > 0.5;
 
             if ($isNude || $isOffensive || $isGore) {
-                Log::info("ImageModeration: Foto {$photo->id} bloqueada por contenido.");
-                return false; // BLOQUEO REAL
+                Log::info("ImageModeration: Photo {$photo->id} flagged (nude={$isNude}, offensive={$isOffensive}, gore={$isGore})");
+
+                return false;
             }
 
             return true;
-
         } catch (\Exception $e) {
-            Log::error('ImageModeration: Excepción crítica — ' . $e->getMessage());
-  
-            return true; 
+            Log::error('ImageModeration: Exception — ' . $e->getMessage());
+
+            return false;
         }
     }
 }
