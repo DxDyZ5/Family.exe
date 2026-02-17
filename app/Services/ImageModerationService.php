@@ -27,15 +27,14 @@ class ImageModerationService
     {
         $disk = Storage::disk('public');
 
-        // 1. Verificación de existencia usando el Driver (más fiable en Railway que path())
+     
         if (!$disk->exists($photo->file_path)) {
             Log::error("ImageModeration: Archivo no encontrado en disco: {$photo->file_path}");
-            // Si no hay archivo, no podemos moderar. Devolvemos true para no bloquear por error de disco.
-            return false; 
+            
+            return true; 
         }
 
         try {
-            // 2. Obtenemos el contenido binario (evita problemas de rutas absolutas en Docker)
             $fileContent = $disk->get($photo->file_path);
 
             $response = Http::timeout(20)
@@ -46,25 +45,25 @@ class ImageModerationService
                     'api_secret' => $this->apiSecret,
                 ]);
 
-            // 3. Si la API falla por red o servidor (500, 404, etc.)
+       
             if (!$response->successful()) {
                 Log::warning('ImageModeration: Fallo de conexión API HTTP ' . $response->status());
-                return false; // No castigamos la foto si la API está caída
+                return true; 
             }
 
             $data = $response->json();
 
-            // 4. Si la API responde pero indica un error interno (ej. sin créditos)
+        
             if (($data['status'] ?? '') !== 'success') {
                 $errorCode = $data['error']['code'] ?? 'unknown';
                 Log::warning("ImageModeration: Error de respuesta API — {$errorCode}");
-                return false; 
+                return true; 
             }
 
-            // 5. Análisis de resultados con umbrales ajustados para familia
+          
             $nudity = $data['nudity'] ?? [];
             
-            // Subimos a 0.8 para evitar falsos positivos en fotos de playa/niños
+        
             $isNude = ($nudity['sexual_activity'] ?? 0) > 0.85
                 || ($nudity['sexual_display'] ?? 0) > 0.80
                 || ($nudity['erotica'] ?? 0) > 0.80;
@@ -73,7 +72,7 @@ class ImageModerationService
             $isOffensive = ($data['offensive']['prob'] ?? 0) > 0.90;
             $isGore = ($data['gore']['prob'] ?? 0) > 0.75;
 
-            // Log de diagnóstico para que veas qué ve la IA en Railway
+
             Log::info("ImageModeration: Scan Foto {$photo->id}", [
                 'scores' => $nudity,
                 'is_flagged' => ($isNude || $isOffensive || $isGore)
@@ -88,8 +87,8 @@ class ImageModerationService
 
         } catch (\Exception $e) {
             Log::error('ImageModeration: Excepción crítica — ' . $e->getMessage());
-            // Si el código explota, dejamos pasar la foto.
-            return false; 
+  
+            return true; 
         }
     }
 }
